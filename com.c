@@ -71,7 +71,6 @@ const speed_spec speeds[] = { { "0", B0 },
 			      { "38400", B38400 },
 			      { "57600", B57600 },
 			      { "115200", B115200 },
-			      { "115200", B115200 },
 			      { "230400", B230400 },
 			      { "460800", B460800 },
 			      { "500000", B500000 },
@@ -157,7 +156,9 @@ static void usage(char *name)
 	fprintf(stderr, "available baud rates:\n");
 
 	while (speeds[i].name)
-		fprintf(stderr, "\t %s \n", speeds[i++].name);
+		fprintf(stderr, "   %s%s", speeds[i++].name, (i % 3 == 2) ? "\n":"");
+
+	fprintf(stderr, "\n");
 }
 
 int main(int argc, char *argv[])
