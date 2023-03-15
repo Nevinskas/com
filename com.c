@@ -45,13 +45,14 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <stdint.h>
-
-int transfer_byte(int from, int to, int is_control);
+#include <sys/epoll.h>
 
 typedef struct {
 	char *name;
 	int flag;
 } speed_spec;
+
+#define MAX_EVENTS     5
 
 const speed_spec speeds[] = { { "0", B0 },
 			      { "50", B50 },
@@ -107,6 +108,47 @@ void print_status(int fd)
 	fprintf(stderr, "\r\n");
 }
 
+#define COM_MAX_CHAR		256
+static int transfer_data(int from, int to, int is_control)
+{
+	char c[COM_MAX_CHAR];
+	int ret;
+
+	do {
+		ret = read(from, &c, COM_MAX_CHAR);
+	} while (ret < 0 && errno == EINTR);
+
+	if (ret <= 0) {
+		fprintf(stderr, "\nnothing to read. probably port disconnected.\n");
+		return -2;
+	}
+
+	//fprintf(stderr, "Read bytes: %i\n\r\n\r", ret);
+
+	if (is_control) {
+		/* okay, this is not the most elegant solution
+		 * to check only the firs byte of data for control
+		 * command...
+		 */
+		if (c[0] == '\x01') { // C-a
+			return -1;
+		} else if (c[0] == '\x18') { // C-x
+			print_status(to);
+			return 0;
+		}
+	}
+	while (write(to, &c, ret) == -1) {
+		if (errno != EAGAIN && errno != EINTR) {
+			perror("write failed");
+			break;
+		}
+	}
+
+	//fprintf(stderr, "\n\r\n\r");
+
+	return 0;
+}
+
 static void usage(char *name)
 {
 	uint8_t i = 0;
@@ -120,13 +162,16 @@ static void usage(char *name)
 
 int main(int argc, char *argv[])
 {
+	int efd;
+	struct epoll_event ev[MAX_EVENTS];
+
 	int comfd;
 	struct termios oldtio,
 		newtio; //place for old and new port settings for serial port
 	struct termios oldkey,
 		newkey; //place tor old and new port settings for keyboard teletype
 	char *devicename = argv[1];
-	int need_exit = 0;
+	int quit = 0;
 	int speed = B115200;
 
 	if (argc < 2) {
@@ -176,23 +221,39 @@ int main(int argc, char *argv[])
 
 	print_status(comfd);
 
-	while (!need_exit) {
-		fd_set fds;
-		int ret;
+	efd = epoll_create(1);
+	if (efd == -1)
+		perror("epoll_create");
 
-		FD_ZERO(&fds);
-		FD_SET(STDIN_FILENO, &fds);
-		FD_SET(comfd, &fds);
+	ev[0].data.fd = STDIN_FILENO;
+	ev[0].events = EPOLLIN;
 
-		ret = select(comfd + 1, &fds, NULL, NULL, NULL);
-		if (ret == -1) {
-			perror("select");
-		} else if (ret > 0) {
-			if (FD_ISSET(STDIN_FILENO, &fds)) {
-				need_exit = transfer_byte(STDIN_FILENO, comfd, 1);
-			}
-			if (FD_ISSET(comfd, &fds)) {
-				need_exit = transfer_byte(comfd, STDIN_FILENO, 0);
+	if (epoll_ctl(efd, EPOLL_CTL_ADD, STDIN_FILENO, &ev[0]))
+		perror("epoll_ctl");
+
+	ev[0].data.fd = comfd;
+	ev[0].events = EPOLLIN;
+
+	if (epoll_ctl(efd, EPOLL_CTL_ADD, comfd, &ev[0]))
+		perror("epoll_ctl");
+
+	while (!quit) {
+		int n, i;
+
+		n = epoll_wait(efd, ev, MAX_EVENTS, -1);
+		if (n <= 0)
+			perror("epoll_wait()");
+
+		for (i = 0; i < n; i++) {
+			struct epoll_event *e = &ev[i];
+
+			if (e->data.fd == STDIN_FILENO) {
+				quit = transfer_data(e->data.fd, comfd, 1);
+			} else if (e->data.fd == comfd) {
+				quit = transfer_data(e->data.fd, STDIN_FILENO, 0);
+			} else {
+				perror("fatal()");
+				abort();
 			}
 		}
 	}
@@ -201,34 +262,5 @@ int main(int argc, char *argv[])
 	tcsetattr(STDIN_FILENO, TCSANOW, &oldkey);
 	close(comfd);
 
-	return 0;
-}
-
-int transfer_byte(int from, int to, int is_control)
-{
-	char c;
-	int ret;
-	do {
-		ret = read(from, &c, 1);
-	} while (ret < 0 && errno == EINTR);
-	if (ret == 1) {
-		if (is_control) {
-			if (c == '\x01') { // C-a
-				return -1;
-			} else if (c == '\x18') { // C-x
-				print_status(to);
-				return 0;
-			}
-		}
-		while (write(to, &c, 1) == -1) {
-			if (errno != EAGAIN && errno != EINTR) {
-				perror("write failed");
-				break;
-			}
-		}
-	} else {
-		fprintf(stderr, "\nnothing to read. probably port disconnected.\n");
-		return -2;
-	}
 	return 0;
 }
