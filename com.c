@@ -52,7 +52,7 @@ typedef struct {
 	int flag;
 } speed_spec;
 
-#define MAX_EVENTS     5
+#define MAX_EPOLL_EVENTS     5
 
 const speed_spec speeds[] = { { "0", B0 },
 			      { "50", B50 },
@@ -117,8 +117,13 @@ static int transfer_data(int from, int to, int is_control)
 		ret = read(from, &c, COM_MAX_CHAR);
 	} while (ret < 0 && errno == EINTR);
 
-	if (ret <= 0) {
-		fprintf(stderr, "\nnothing to read. probably port disconnected.\n");
+	if (ret == 0) {
+		fprintf(stderr, "\nnothing to read. probably port disconnected. ret: %i\n", ret);
+		return -3;
+	}
+
+	if (ret == -1) {
+		perror("read");
 		return -2;
 	}
 
@@ -164,7 +169,7 @@ static void usage(char *name)
 int main(int argc, char *argv[])
 {
 	int efd;
-	struct epoll_event ev[MAX_EVENTS];
+	struct epoll_event ev[MAX_EPOLL_EVENTS];
 
 	int comfd;
 	struct termios oldtio,
@@ -241,7 +246,7 @@ int main(int argc, char *argv[])
 	while (!quit) {
 		int n, i;
 
-		n = epoll_wait(efd, ev, MAX_EVENTS, -1);
+		n = epoll_wait(efd, ev, MAX_EPOLL_EVENTS, -1);
 		if (n <= 0)
 			perror("epoll_wait()");
 
