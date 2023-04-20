@@ -139,6 +139,9 @@ static int transfer_data(int from, int to, int is_control)
 		} else if (c[0] == '\x18') { // C-x
 			print_status(to);
 			return 0;
+		} else if (c[0] == '\x13') { // C-s
+			fprintf(stderr, "sending break...\n\r");
+			tcsendbreak(to, 0);
 		}
 	}
 	while (write(to, &c, ret) == -1) {
