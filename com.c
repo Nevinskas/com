@@ -139,9 +139,10 @@ static int transfer_data(int from, int to, int is_control)
 		} else if (c[0] == '\x18') { // C-x
 			print_status(to);
 			return 0;
-		} else if (c[0] == '\x13') { // C-s
+		} else if (c[0] == '\x08') { // C-h
 			fprintf(stderr, "sending break...\n\r");
 			tcsendbreak(to, 0);
+			ret = read(from, &c, COM_MAX_CHAR);
 		}
 	}
 	while (write(to, &c, ret) == -1) {
@@ -206,7 +207,7 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	fprintf(stderr, "C-a exit, C-x modem lines status\n");
+	fprintf(stderr, "C-a exit, C-x modem lines status, C-h send break\n");
 
 	tcgetattr(STDIN_FILENO, &oldkey);
 	newkey.c_cflag = B9600 | CRTSCTS | CS8 | CLOCAL | CREAD;
