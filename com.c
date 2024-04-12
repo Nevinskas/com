@@ -52,7 +52,7 @@ typedef struct {
 	int flag;
 } speed_spec;
 
-#define MAX_EPOLL_EVENTS     5
+#define MAX_EPOLL_EVENTS 5
 
 const speed_spec speeds[] = { { "0", B0 },
 			      { "50", B50 },
@@ -107,7 +107,7 @@ void print_status(int fd)
 	fprintf(stderr, "\r\n");
 }
 
-#define COM_MAX_CHAR		256
+#define COM_MAX_CHAR 256
 static int transfer_data(int from, int to, int is_control)
 {
 	char c[COM_MAX_CHAR];
@@ -145,6 +145,7 @@ static int transfer_data(int from, int to, int is_control)
 			ret = read(from, &c, COM_MAX_CHAR);
 		}
 	}
+
 	while (write(to, &c, ret) == -1) {
 		if (errno != EAGAIN && errno != EINTR) {
 			perror("write failed");
@@ -157,6 +158,26 @@ static int transfer_data(int from, int to, int is_control)
 	return 0;
 }
 
+static const speed_spec *validate_speed(char *speed_arg)
+{
+	const speed_spec *s;
+
+	for (s = speeds; s->name; s++)
+		if (strcmp(s->name, speed_arg) == 0)
+			return s;
+
+	return NULL;
+}
+
+static void banner(void)
+{
+	fprintf(stderr, "  ___    ___     ___ ___			\n");
+	fprintf(stderr, " /'___\\ / __`\\ /' __` __`\\			\n");
+	fprintf(stderr, "/\\ \\__//\\ \\_\\ \\/\\ \\/\\ \\/\\ \\	\n");
+	fprintf(stderr, "\\ \\____\\ \\____/\\ \\_\\ \\_\\ \\_\\	\n");
+	fprintf(stderr, " \\/____/\\/___/  \\/_/\\/_/\\/_/		\n\n");
+}
+
 static void usage(char *name)
 {
 	uint8_t i = 0;
@@ -165,7 +186,7 @@ static void usage(char *name)
 	fprintf(stderr, "available baud rates:\n");
 
 	while (speeds[i].name)
-		fprintf(stderr, "   %s%s", speeds[i++].name, (i % 3 == 2) ? "\n":"");
+		fprintf(stderr, "   %s%s", speeds[i++].name, (i % 3 == 2) ? "\n" : "");
 
 	fprintf(stderr, "\n");
 }
@@ -176,13 +197,11 @@ int main(int argc, char *argv[])
 	struct epoll_event ev[MAX_EPOLL_EVENTS];
 
 	int comfd;
-	struct termios oldtio,
-		newtio; //place for old and new port settings for serial port
-	struct termios oldkey,
-		newkey; //place tor old and new port settings for keyboard teletype
+	struct termios oldtio, newtio; //place for old and new port settings for serial port
+	struct termios oldkey, newkey; //place tor old and new port settings for keyboard teletype
 	char *devicename = argv[1];
 	int quit = 0;
-	int speed = B115200;
+	const speed_spec *speed = &speeds[16]; // B115200
 
 	if (argc < 2) {
 		usage(argv[0]);
@@ -195,15 +214,17 @@ int main(int argc, char *argv[])
 		exit(-1);
 	}
 
-	if (argc > 2) {
-		const speed_spec *s;
-		for (s = speeds; s->name; s++) {
-			if (strcmp(s->name, argv[2]) != 0)
-				continue;
+	banner();
 
-			speed = s->flag;
+	if (argc > 2) {
+		const speed_spec *s = validate_speed(argv[2]);
+
+		if (s) {
 			fprintf(stderr, "setting speed %s\n", s->name);
-			break;
+			speed = s;
+		} else {
+			fprintf(stderr, "failed to set %s speed.\n", argv[2]);
+			fprintf(stderr, "falling back to %s\n", speed->name);
 		}
 	}
 
@@ -220,7 +241,7 @@ int main(int argc, char *argv[])
 	tcsetattr(STDIN_FILENO, TCSANOW, &newkey);
 
 	tcgetattr(comfd, &oldtio); // save current port settings
-	newtio.c_cflag = speed | CS8 | CLOCAL | CREAD;
+	newtio.c_cflag = speed->flag | CS8 | CLOCAL | CREAD;
 	newtio.c_iflag = IGNPAR;
 	newtio.c_oflag = 0;
 	newtio.c_lflag = 0;
