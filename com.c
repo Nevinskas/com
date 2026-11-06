@@ -231,22 +231,18 @@ int main(int argc, char *argv[])
 	fprintf(stderr, "C-a exit, C-x modem lines status, C-h send break\n");
 
 	tcgetattr(STDIN_FILENO, &oldkey);
-	newkey.c_cflag = B9600 | CRTSCTS | CS8 | CLOCAL | CREAD;
-	newkey.c_iflag = IGNPAR;
-	newkey.c_oflag = 0;
-	newkey.c_lflag = 0;
-	newkey.c_cc[VMIN] = 1;
-	newkey.c_cc[VTIME] = 0;
+	newkey = oldkey;
+	cfmakeraw(&newkey);
 	tcflush(STDIN_FILENO, TCIFLUSH);
 	tcsetattr(STDIN_FILENO, TCSANOW, &newkey);
 
 	tcgetattr(comfd, &oldtio); // save current port settings
-	newtio.c_cflag = speed->flag | CS8 | CLOCAL | CREAD;
-	newtio.c_iflag = IGNPAR;
-	newtio.c_oflag = 0;
-	newtio.c_lflag = 0;
-	newtio.c_cc[VMIN] = 1;
-	newtio.c_cc[VTIME] = 0;
+	newtio = oldtio;
+	cfmakeraw(&newtio);
+	newtio.c_cflag &= ~(CRTSCTS | CSTOPB);
+	newtio.c_cflag |= CLOCAL | CREAD;
+	cfsetispeed(&newtio, speed->flag);
+	cfsetospeed(&newtio, speed->flag);
 	tcflush(comfd, TCIFLUSH);
 	tcsetattr(comfd, TCSANOW, &newtio);
 
