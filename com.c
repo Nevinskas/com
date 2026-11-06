@@ -111,6 +111,7 @@ void print_status(int fd)
 static int transfer_data(int from, int to, int is_control)
 {
 	char c[COM_MAX_CHAR];
+	char *p = c;
 	int ret;
 
 	do {
@@ -142,11 +143,14 @@ static int transfer_data(int from, int to, int is_control)
 		} else if (c[0] == '\x08') { // C-h
 			fprintf(stderr, "sending break...\n\r");
 			tcsendbreak(to, 0);
-			ret = read(from, &c, COM_MAX_CHAR);
+			p++;
+			ret--;
+			if (ret == 0)
+				return 0;
 		}
 	}
 
-	while (write(to, &c, ret) == -1) {
+	while (write(to, p, ret) == -1) {
 		if (errno != EAGAIN && errno != EINTR) {
 			perror("write failed");
 			break;
